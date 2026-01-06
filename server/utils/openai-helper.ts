@@ -140,7 +140,10 @@ export async function matchPptToTemplateFields(
   const slidesText = pptContent.slides.map(slide => {
     const texts = slide.texts.join('\n')
     const notes = slide.notes ? `\n备注: ${slide.notes}` : ''
-    return `第${slide.slideNumber}页:\n${texts}${notes}`
+    const imageInfo = slide.images && slide.images.length > 0
+      ? `\n[该页包含${slide.images.length}张图片]`
+      : ''
+    return `第${slide.slideNumber}页:\n${texts}${notes}${imageInfo}`
   }).join('\n\n')
 
   // 限制内容长度
@@ -153,10 +156,30 @@ export async function matchPptToTemplateFields(
   console.log('PPT 内容长度:', truncatedContent.length)
   console.log('模板字段:', templateFields)
 
+  // 收集所有图片（限制数量避免token过多）
+  const allImages: string[] = []
+  for (const slide of pptContent.slides) {
+    if (slide.images && slide.images.length > 0) {
+      // 每张幻灯片最多取前2张图片
+      allImages.push(...slide.images.slice(0, 2))
+    }
+    // 总共最多20张图片
+    if (allImages.length >= 20) break
+  }
+
+  console.log('提取的图片数量:', allImages.length)
+
   // 构建更详细的中文提示词
   const systemPrompt = `你是一位经验丰富的医学护理教学设计专家，擅长根据课件内容编写详细、专业的护理教案。
 
-你的任务是根据提供的PPT课件内容，为教案模板的各个字段生成高质量、详细的内容。
+你的任务是根据提供的PPT课件内容（包括文字和图片），为教案模板的各个字段生成高质量、详细的内容。
+
+${allImages.length > 0 ? `注意：你可以看到${allImages.length}张来自PPT的图片。请仔细观察图片中的：
+- 图表、流程图、示意图等视觉内容
+- 关键概念的图示说明
+- 病理图片、解剖图等医学图像
+- 表格数据
+结合图片内容，让教案更加准确、专业和详细。` : ''}
 
 重要要求：
 1. 内容要详细充实，不要简单概括
@@ -181,11 +204,12 @@ export async function matchPptToTemplateFields(
 6. 保持专业的医学护理教学语言
 7. 参考真实护理教案的写作风格和格式`
 
-  const userPrompt = `请根据以下PPT课件内容，为护理教案模板填充内容。
+  const userPrompt = `请根据以下PPT课件内容${allImages.length > 0 ? '和图片' : ''}，为护理教案模板填充内容。
 
 PPT课件内容：
 ${truncatedContent}
 
+${allImages.length > 0 ? `\n你可以看到PPT中的${allImages.length}张图片，请仔细观察并结合图片内容生成教案。\n` : ''}
 需要填充的教案字段：
 ${templateFields.map((f, i) => `${i + 1}. ${f}`).join('\n')}
 
@@ -303,11 +327,39 @@ A. XXX  B. XXX  C. XXX  D. XXX  E. XXX
       schemaFields[field] = z.string().describe(`${field}的详细内容，要求内容充实，格式规范，列表项独立成行`)
     }
 
+    // 构建消息内容（支持多模态）
+    const messageContent: any[] = [
+      {
+        type: 'text',
+        text: userPrompt
+      }
+    ]
+
+    // 如果有图片，添加到消息中
+    if (allImages.length > 0) {
+      console.log(`发送${allImages.length}张图片给AI进行视觉分析`)
+
+      for (const imageBase64 of allImages) {
+        messageContent.push({
+          type: 'image',
+          image: imageBase64
+        })
+      }
+    }
+
     const { object } = await generateObject({
       model: openai(model),
       schema: z.object(schemaFields),
-      system: systemPrompt,
-      prompt: userPrompt,
+      messages: [
+        {
+          role: 'system',
+          content: systemPrompt
+        },
+        {
+          role: 'user',
+          content: messageContent
+        }
+      ],
       temperature: 0.7,
       maxTokens: 4000
     })

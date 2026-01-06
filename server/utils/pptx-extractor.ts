@@ -9,6 +9,7 @@ export interface SlideContent {
   texts: string[]  // 所有文本内容，按顺序保留
   notes?: string
   rawTexts?: string[]  // 原始文本（未去重）
+  images?: string[]  // 图片base64数组
 }
 
 export interface PptxContent {
@@ -22,7 +23,7 @@ export interface PptxContent {
 }
 
 /**
- * 从PPTX文件中提取文本内容（原封不动）
+ * 从PPTX文件中提取文本内容和图片
  */
 export async function extractPptxContent(buffer: Buffer): Promise<PptxContent> {
   const zip = new AdmZip(buffer)
@@ -41,10 +42,17 @@ export async function extractPptxContent(buffer: Buffer): Promise<PptxContent> {
   for (let i = 0; i < slideFiles.length; i++) {
     const slideEntry = slideFiles[i]
     const slideXml = slideEntry.getData().toString('utf8')
+    const slideNumber = slideEntry.entryName.match(/\d+/)?.[0] || (i + 1).toString()
+
     const slideContent = await extractSlideContent(slideXml, i + 1)
 
+    // 提取图片
+    const images = await extractSlideImages(zip, slideNumber, slideXml)
+    if (images.length > 0) {
+      slideContent.images = images
+    }
+
     // 尝试提取备注
-    const slideNumber = slideEntry.entryName.match(/\d+/)?.[0]
     const notesEntry = zipEntries.find(entry =>
       entry.entryName === `ppt/notesSlides/notesSlide${slideNumber}.xml`
     )
@@ -186,5 +194,101 @@ async function extractMetadata(zip: AdmZip): Promise<PptxContent['metadata']> {
     }
   } catch {
     return {}
+  }
+}
+
+/**
+ * 提取幻灯片中的图片
+ */
+async function extractSlideImages(zip: AdmZip, slideNumber: string, slideXml: string): Promise<string[]> {
+  try {
+    const result: any = await parseXml(slideXml)
+    const images: string[] = []
+
+    // 获取关系文件
+    const relsEntry = zip.getEntry(`ppt/slides/_rels/slide${slideNumber}.xml.rels`)
+    if (!relsEntry) return images
+
+    const relsXml = relsEntry.getData().toString('utf8')
+    const relsResult: any = await parseXml(relsXml)
+
+    const relationships = relsResult['Relationships']?.['Relationship'] || []
+    const imageRels: Map<string, string> = new Map()
+
+    // 建立ID到图片路径的映射
+    for (const rel of relationships) {
+      const relId = rel['$']?.['Id']
+      const target = rel['$']?.['Target']
+      const type = rel['$']?.['Type']
+
+      if (type && type.includes('image') && relId && target) {
+        // 图片路径通常是相对路径，如 ../media/image1.png
+        const imagePath = target.startsWith('../')
+          ? `ppt/${target.substring(3)}`
+          : `ppt/slides/${target}`
+
+        imageRels.set(relId, imagePath)
+      }
+    }
+
+    // 从幻灯片XML中查找图片引用
+    const slide = result['p:sld']
+    if (!slide) return images
+
+    // 递归查找所有blip元素（图片引用）
+    function findBlips(obj: any, imageIds: Set<string>) {
+      if (!obj) return
+
+      if (Array.isArray(obj)) {
+        obj.forEach(item => findBlips(item, imageIds))
+        return
+      }
+
+      if (typeof obj === 'object') {
+        // 查找a:blip元素
+        if (obj['a:blip']) {
+          const blips = Array.isArray(obj['a:blip']) ? obj['a:blip'] : [obj['a:blip']]
+          blips.forEach((blip: any) => {
+            const embedId = blip['$']?.['r:embed']
+            if (embedId) {
+              imageIds.add(embedId)
+            }
+          })
+        }
+
+        // 递归搜索
+        Object.values(obj).forEach(value => findBlips(value, imageIds))
+      }
+    }
+
+    const imageIds = new Set<string>()
+    findBlips(slide, imageIds)
+
+    // 提取图片并转换为base64
+    for (const imageId of imageIds) {
+      const imagePath = imageRels.get(imageId)
+      if (!imagePath) continue
+
+      const imageEntry = zip.getEntry(imagePath)
+      if (!imageEntry) continue
+
+      const imageBuffer = imageEntry.getData()
+      const ext = imagePath.split('.').pop()?.toLowerCase() || 'png'
+
+      // 确定MIME类型
+      let mimeType = 'image/png'
+      if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg'
+      else if (ext === 'gif') mimeType = 'image/gif'
+      else if (ext === 'svg') mimeType = 'image/svg+xml'
+      else if (ext === 'webp') mimeType = 'image/webp'
+
+      const base64 = imageBuffer.toString('base64')
+      images.push(`data:${mimeType};base64,${base64}`)
+    }
+
+    return images
+  } catch (error) {
+    console.error('提取图片失败:', error)
+    return []
   }
 }

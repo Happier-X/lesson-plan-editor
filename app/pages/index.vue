@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import type { PptxContent } from '~/server/utils/pptx-extractor'
 
+// 扩展SlideContent类型以包含图片
+interface SlideContent {
+  slideNumber: number
+  texts: string[]
+  notes?: string
+  rawTexts?: string[]
+  images?: string[]
+}
+
 const toast = useToast()
 
 // PPT提取相关状态
@@ -24,6 +33,11 @@ const isGenerating = ref(false)
 const isSmartFilling = ref(false)
 const showTemplateManager = ref(false)
 const templateData = ref<Record<string, string>>({})
+
+// 计算属性：检查是否有图片
+const hasImages = computed(() => {
+  return extractedContent.value?.slides.some(slide => slide.images && slide.images.length > 0) || false
+})
 
 // 文件选择处理
 const fileInput = ref<HTMLInputElement>()
@@ -543,15 +557,31 @@ onMounted(() => {
               class="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors"
             >
               <div class="flex items-start justify-between mb-3">
-                <UBadge color="blue" variant="soft">
-                  第 {{ slide.slideNumber }} 页
-                </UBadge>
+                <div class="flex items-center gap-2">
+                  <UBadge color="blue" variant="soft">
+                    第 {{ slide.slideNumber }} 页
+                  </UBadge>
+                  <UBadge v-if="slide.images && slide.images.length > 0" color="violet" variant="soft" size="xs">
+                    📸 {{ slide.images.length }} 张图片
+                  </UBadge>
+                </div>
                 <UButton
                   color="gray"
                   variant="ghost"
                   size="xs"
                   icon="i-heroicons-clipboard-document"
                   @click="copyContent(slide.texts.join('\n'))"
+                />
+              </div>
+
+              <!-- 图片预览 -->
+              <div v-if="slide.images && slide.images.length > 0" class="mb-3 grid grid-cols-2 gap-2">
+                <img
+                  v-for="(img, idx) in slide.images"
+                  :key="idx"
+                  :src="img"
+                  :alt="`第${slide.slideNumber}页图片${idx + 1}`"
+                  class="w-full h-32 object-contain bg-gray-50 rounded border border-gray-200"
                 />
               </div>
 
@@ -710,7 +740,7 @@ onMounted(() => {
                 @click="smartFill"
               >
                 <UIcon name="i-heroicons-sparkles" class="w-4 h-4 mr-1" />
-                {{ isSmartFilling ? 'AI智能填充中...' : 'AI智能填充' }}
+                {{ isSmartFilling ? 'AI智能填充中...' : hasImages ? 'AI智能填充（含视觉分析）' : 'AI智能填充' }}
               </UButton>
             </div>
             <div class="grid gap-4 md:grid-cols-2">
