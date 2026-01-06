@@ -144,7 +144,7 @@ export async function matchPptToTemplateFields(
   }).join('\n\n')
 
   // 限制内容长度
-  const maxContentLength = 2000
+  const maxContentLength = 4000
   const truncatedContent = slidesText.length > maxContentLength
     ? slidesText.substring(0, maxContentLength) + '\n...'
     : slidesText
@@ -153,37 +153,176 @@ export async function matchPptToTemplateFields(
   console.log('PPT 内容长度:', truncatedContent.length)
   console.log('模板字段:', templateFields)
 
-  const prompt = `Based on the following PPT content, fill in the template fields.
+  // 构建更详细的中文提示词
+  const systemPrompt = `你是一位经验丰富的医学护理教学设计专家，擅长根据课件内容编写详细、专业的护理教案。
 
-PPT Content:
+你的任务是根据提供的PPT课件内容，为教案模板的各个字段生成高质量、详细的内容。
+
+重要要求：
+1. 内容要详细充实，不要简单概括
+2. 对于教学过程等字段，要包含：
+   - 安全教育（2min）：如"上下楼梯靠右走，不追逐打闹"
+   - 导入/复习导入（5-10min）：
+     * 新授课：设计引入情境、案例或问题讨论
+     * 复习课：列出"重点掌握"的知识点清单
+   - 课堂呈现/新课讲授（20-30min）：
+     * 详细列出知识点，使用①②③④⑤编号
+     * 标注考点类型（选择题）（简答题）（重点）
+     * 包含具体内容和要点
+   - 巩固练习（5-10min）：设计3-5道选择题，包含ABCDE选项
+   - 课堂小结（3-5min）：写成完整的叙述性段落，总结本节课要点
+   - 作业布置（2-5min）：布置具体作业
+3. 对于板书设计：
+   - 简洁明了，使用符号（→）表示逻辑关系
+   - 列出核心知识框架
+   - 每个要点独立成行
+4. 列表项要使用换行，每个要点独立成行
+5. 护理措施要详细，使用①②③④⑤编号，每项包含具体内容
+6. 保持专业的医学护理教学语言
+7. 参考真实护理教案的写作风格和格式`
+
+  const userPrompt = `请根据以下PPT课件内容，为护理教案模板填充内容。
+
+PPT课件内容：
 ${truncatedContent}
 
-Template Fields:
-${templateFields.join(', ')}
+需要填充的教案字段：
+${templateFields.map((f, i) => `${i + 1}. ${f}`).join('\n')}
 
-Return a JSON object with each field as a key and appropriate content as the value.`
+填充要求：
+
+【课题】
+- 格式："第X章第X节 XXX病人的护理" 或 "第X章 XXX"
+
+【教学目标】
+- 分为三个维度，每个独立成行：
+  1. 知识目标：掌握XXX；熟悉XXX；了解XXX
+  2. 能力目标：能够XXX
+  3. 情感目标：培养XXX意识/态度
+
+【教材分析重点】
+- 列出3-5个重点内容，每项独立成行
+- 格式示例：
+  重点内容一
+  重点内容二
+
+【教材分析难点】
+- 列出2-4个难点内容，每项独立成行
+
+【教材分析教具】
+- 列出教学工具，如：教案、PPT、模型、教材等
+
+【教学过程】（这是最重要的部分，要非常详细）
+必须包含以下完整结构：
+
+一、安全教育（2min）
+上下楼梯靠右走，不追逐打闹，过马路注意安全
+
+二、导入/复习导入（5-10min）
+新授课：设计引入案例、小组讨论问题
+复习课：列出"重点掌握"的知识点清单，例如：
+重点掌握：
+1. XXX的病理变化
+2. XXX的临床表现
+3. XXX的护理措施
+
+三、课堂呈现/新课讲授（20-30min）
+（根据课型选择"课堂呈现"或"新课讲授"）
+
+新授课格式：
+第一课时（30min）
+一、概念及病理生理
+1. 定义
+2. 病因
+3. 病理机制
+
+第二课时（30min）
+一、护理评估
+1. 健康史
+2. 身体状况
+...
+
+复习课格式：
+1. 概述：一组以XXX为基本临床表现的XXX疾病
+2. 身体状况
+①XXX：详细描述（选择题）
+②XXX：详细描述
+③XXX：详细描述
+3. 辅助检查
+4. 治疗要点（以简答题的形式背过）
+①XXX
+②XXX（选择题）
+③XXX
+5. 常见护理诊断（重点+简答题考点）
+①XXX
+②XXX
+6. 护理措施
+①一般护理：详细内容
+②病情观察：详细内容
+③用药护理：详细内容
+④对症护理：详细内容
+⑤心理护理：详细内容
+⑥健康指导：详细内容
+
+四、巩固练习/练习巩固（5-10min）
+设计3-5道选择题，格式如下：
+1. XXX的主要临床表现不包括（  ）
+A. XXX  B. XXX  C. XXX  D. XXX  E. XXX
+
+2. XXX患者饮食应注意的是（  ）
+A. XXX  B. XXX  C. XXX  D. XXX  E. XXX
+
+五、课堂小结（3-5min）
+写成完整的叙述性段落，总结本节课的要点，例如：
+"本次课程我们全面学习了XXX。该病以XXX为主要表现，诊断时依靠XXX。治疗上，XXX。护理过程中，要XXX。还要注重XXX，给予患者足够的支持与鼓励。"
+
+六、作业布置/课后作业（2-5min）
+整理本章节重难点/整理课堂笔记，完成课后练习题
+
+【板书设计】
+简洁的知识框架，使用符号，每个要点独立成行：
+1. 定义：XXX→XXX→XXX
+2. 分类：XXX、XXX
+3. 病情监测：XXX（正常值）
+4. 急救：XXX原则
+5. 治疗配合：XXX
+6. 基础护理：XXX
+
+格式要求：
+1. 所有列表项必须换行
+2. 使用①②③④⑤标注子项
+3. 适当标注考点类型：（选择题）（简答题）（重点）
+4. 课堂小结要写成完整段落，不是列表
+
+请严格按照以上要求生成详细、专业、格式规范的护理教案内容。`
 
   try {
     // 动态构建 schema
     const schemaFields: Record<string, any> = {}
     for (const field of templateFields) {
-      schemaFields[field] = z.string().describe(`${field}的内容`)
+      schemaFields[field] = z.string().describe(`${field}的详细内容，要求内容充实，格式规范，列表项独立成行`)
     }
 
     const { object } = await generateObject({
       model: openai(model),
       schema: z.object(schemaFields),
-      system: 'You are a teaching assistant.',
-      prompt,
-      temperature: 0.5
+      system: systemPrompt,
+      prompt: userPrompt,
+      temperature: 0.7,
+      maxTokens: 4000
     })
 
     console.log('AI 响应成功')
 
-    // 确保所有模板字段都有值
+    // 格式化处理：确保序号后换行
     const filledData: Record<string, string> = {}
     for (const field of templateFields) {
-      filledData[field] = object[field] || `请填写${field}`
+      let content = object[field] || `请填写${field}`
+
+      // 处理序号换行
+      content = formatListItems(content)
+
+      filledData[field] = content
     }
 
     return filledData
@@ -192,4 +331,43 @@ Return a JSON object with each field as a key and appropriate content as the val
     console.error('错误:', error)
     throw new Error(`智能填充失败: ${error.message || '未知错误'}`)
   }
+}
+
+/**
+ * 格式化列表项，确保序号后换行
+ */
+function formatListItems(text: string): string {
+  if (!text) return text
+
+  let formatted = text
+
+  // 1. 先处理可能存在的Windows换行符
+  formatted = formatted.replace(/\r\n/g, '\n')
+
+  // 2. 处理数字序号后面直接跟内容的情况（1.内容 -> \n1.内容）
+  // 但不处理已经有换行符的情况
+  formatted = formatted.replace(/([^\n])(\d+\.)/g, '$1\n$2')
+
+  // 3. 处理中文序号（一、二、三、等）
+  formatted = formatted.replace(/([^\n])([一二三四五六七八九十]+、)/g, '$1\n$2')
+
+  // 4. 处理括号序号（(1) (2) 等）
+  formatted = formatted.replace(/([^\n])(\(\d+\))/g, '$1\n$2')
+
+  // 5. 处理中文括号序号（（一）（二）等）
+  formatted = formatted.replace(/([^\n])(（[一二三四五六七八九十]+）)/g, '$1\n$2')
+
+  // 6. 处理带圈数字（①②③④⑤⑥⑦⑧⑨⑩）
+  formatted = formatted.replace(/([^\n])([①②③④⑤⑥⑦⑧⑨⑩])/g, '$1\n$2')
+
+  // 7. 处理可能的多个空格
+  formatted = formatted.replace(/ {2,}/g, ' ')
+
+  // 8. 清理多余的空行（超过2个连续换行符）
+  formatted = formatted.replace(/\n{3,}/g, '\n\n')
+
+  // 9. 去除开头和结尾的空白
+  formatted = formatted.trim()
+
+  return formatted
 }

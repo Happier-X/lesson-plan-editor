@@ -10,6 +10,11 @@ export default defineNuxtConfig({
       openaiApiKey: process.env.NUXT_PUBLIC_OPENAI_API_KEY,
       openaiBaseUrl: process.env.NUXT_PUBLIC_OPENAI_BASE_URL,
       openaiModel: process.env.NUXT_PUBLIC_OPENAI_MODEL,
-    }
-  }
+    },
+  },
+  nitro: {
+    devProxy: {
+      "/sw.js": { target: "/sw.js" },
+    },
+  },
 });
