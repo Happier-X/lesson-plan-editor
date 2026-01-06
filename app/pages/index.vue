@@ -3,10 +3,26 @@ import type { PptxContent } from '~/server/utils/pptx-extractor'
 
 const toast = useToast()
 
-// 状态管理
+// PPT提取相关状态
 const selectedFile = ref<File | null>(null)
 const isExtracting = ref(false)
 const extractedContent = ref<PptxContent | null>(null)
+
+// 模板管理相关状态
+interface TemplateInfo {
+  id: string
+  name: string
+  uploadDate: string
+  placeholders: string[]
+}
+
+const templates = ref<TemplateInfo[]>([])
+const selectedTemplate = ref<TemplateInfo | null>(null)
+const templateFile = ref<File | null>(null)
+const isUploadingTemplate = ref(false)
+const isGenerating = ref(false)
+const showTemplateManager = ref(false)
+const templateData = ref<Record<string, string>>({})
 
 // 文件选择处理
 const fileInput = ref<HTMLInputElement>()
@@ -118,6 +134,214 @@ const copyAllContent = () => {
 
   copyContent(allText)
 }
+
+// ========== 模板管理相关方法 ==========
+
+// 加载模板列表
+const loadTemplates = async () => {
+  try {
+    const response = await $fetch<{
+      success: boolean
+      data: TemplateInfo[]
+    }>('/api/templates/list')
+
+    if (response.success) {
+      templates.value = response.data
+    }
+  } catch (error: any) {
+    console.error('加载模板列表失败:', error)
+  }
+}
+
+// 模板文件选择
+const templateFileInput = ref<HTMLInputElement>()
+
+const handleTemplateFileSelect = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+
+  if (file) {
+    if (!file.name.endsWith('.docx')) {
+      toast.add({
+        title: '文件格式错误',
+        description: '请选择.docx格式的文件',
+        color: 'red',
+        timeout: 3000
+      })
+      return
+    }
+
+    templateFile.value = file
+  }
+}
+
+// 上传模板
+const uploadTemplate = async () => {
+  if (!templateFile.value) {
+    toast.add({
+      title: '请先选择模板文件',
+      description: '请选择一个.docx文件',
+      color: 'amber',
+      timeout: 3000
+    })
+    return
+  }
+
+  isUploadingTemplate.value = true
+
+  try {
+    const formData = new FormData()
+    formData.append('file', templateFile.value)
+
+    const response = await $fetch<{
+      success: boolean
+      data: TemplateInfo
+    }>('/api/templates/upload', {
+      method: 'POST',
+      body: formData
+    })
+
+    if (response.success) {
+      toast.add({
+        title: '上传成功',
+        description: `模板已保存，识别到 ${response.data.placeholders.length} 个占位符`,
+        color: 'green',
+        timeout: 3000
+      })
+
+      templateFile.value = null
+      if (templateFileInput.value) {
+        templateFileInput.value.value = ''
+      }
+
+      await loadTemplates()
+    }
+  } catch (error: any) {
+    console.error('上传模板失败:', error)
+    toast.add({
+      title: '上传失败',
+      description: error.data?.message || '请稍后重试',
+      color: 'red',
+      timeout: 5000
+    })
+  } finally {
+    isUploadingTemplate.value = false
+  }
+}
+
+// 删除模板
+const deleteTemplate = async (id: string) => {
+  try {
+    await $fetch(`/api/templates/${id}`, {
+      method: 'DELETE'
+    })
+
+    toast.add({
+      title: '删除成功',
+      description: '模板已删除',
+      color: 'green',
+      timeout: 2000
+    })
+
+    await loadTemplates()
+
+    if (selectedTemplate.value?.id === id) {
+      selectedTemplate.value = null
+      templateData.value = {}
+    }
+  } catch (error: any) {
+    console.error('删除模板失败:', error)
+    toast.add({
+      title: '删除失败',
+      description: error.data?.message || '请稍后重试',
+      color: 'red',
+      timeout: 5000
+    })
+  }
+}
+
+// 选择模板
+const selectTemplate = (template: TemplateInfo) => {
+  selectedTemplate.value = template
+  // 初始化模板数据
+  templateData.value = {}
+  template.placeholders.forEach(placeholder => {
+    templateData.value[placeholder] = ''
+  })
+}
+
+// 生成Word文档
+const generateDocument = async () => {
+  if (!selectedTemplate.value) {
+    toast.add({
+      title: '请选择模板',
+      description: '请先选择一个Word模板',
+      color: 'amber',
+      timeout: 3000
+    })
+    return
+  }
+
+  // 检查是否所有字段都已填写
+  const emptyFields = Object.entries(templateData.value)
+    .filter(([_, value]) => !value || value.trim() === '')
+    .map(([key]) => key)
+
+  if (emptyFields.length > 0) {
+    toast.add({
+      title: '请填写所有字段',
+      description: `以下字段未填写: ${emptyFields.join(', ')}`,
+      color: 'amber',
+      timeout: 5000
+    })
+    return
+  }
+
+  isGenerating.value = true
+
+  try {
+    const blob = await $fetch('/api/templates/generate', {
+      method: 'POST',
+      body: {
+        templateId: selectedTemplate.value.id,
+        data: templateData.value
+      },
+      responseType: 'blob'
+    })
+
+    // 下载文件
+    const url = URL.createObjectURL(blob as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `教案_${Date.now()}.docx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+
+    toast.add({
+      title: '生成成功',
+      description: 'Word文档已生成并下载',
+      color: 'green',
+      timeout: 3000
+    })
+  } catch (error: any) {
+    console.error('生成文档失败:', error)
+    toast.add({
+      title: '生成失败',
+      description: error.data?.message || '请稍后重试',
+      color: 'red',
+      timeout: 5000
+    })
+  } finally {
+    isGenerating.value = false
+  }
+}
+
+// 页面加载时获取模板列表
+onMounted(() => {
+  loadTemplates()
+})
 </script>
 
 <template>
@@ -303,6 +527,149 @@ const copyAllContent = () => {
           </div>
         </UCard>
       </div>
+
+      <!-- Word模板管理区域 -->
+      <UCard class="mt-8">
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h2 class="text-xl font-semibold text-gray-900">
+              📄 Word教案模板管理
+            </h2>
+            <UButton
+              color="gray"
+              variant="soft"
+              size="sm"
+              @click="showTemplateManager = !showTemplateManager"
+            >
+              {{ showTemplateManager ? '收起' : '展开' }}
+            </UButton>
+          </div>
+        </template>
+
+        <div v-if="showTemplateManager" class="space-y-6">
+          <!-- 上传新模板 -->
+          <div class="border-b pb-6">
+            <h3 class="font-semibold text-gray-900 mb-4">上传新模板</h3>
+            <div class="flex gap-3">
+              <div class="flex-1">
+                <input
+                  ref="templateFileInput"
+                  type="file"
+                  accept=".docx"
+                  class="hidden"
+                  @change="handleTemplateFileSelect"
+                />
+                <UButton
+                  color="white"
+                  block
+                  @click="templateFileInput?.click()"
+                >
+                  <UIcon name="i-heroicons-document-plus" class="w-5 h-5 mr-2" />
+                  {{ templateFile ? templateFile.name : '选择Word模板文件' }}
+                </UButton>
+              </div>
+              <UButton
+                color="primary"
+                :loading="isUploadingTemplate"
+                :disabled="!templateFile"
+                @click="uploadTemplate"
+              >
+                上传模板
+              </UButton>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">
+              提示：模板中使用 <code class="bg-gray-100 px-1 rounded">{字段名}</code> 作为占位符，例如 {课程目标}, {教学重点}
+            </p>
+          </div>
+
+          <!-- 模板列表 -->
+          <div>
+            <h3 class="font-semibold text-gray-900 mb-4">我的模板 ({{ templates.length }})</h3>
+
+            <div v-if="templates.length === 0" class="text-center py-8 text-gray-500">
+              暂无模板，请先上传Word模板文件
+            </div>
+
+            <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div
+                v-for="template in templates"
+                :key="template.id"
+                class="border rounded-lg p-4 hover:border-blue-300 transition-colors cursor-pointer"
+                :class="{ 'border-blue-500 bg-blue-50': selectedTemplate?.id === template.id }"
+                @click="selectTemplate(template)"
+              >
+                <div class="flex items-start justify-between mb-2">
+                  <h4 class="font-medium text-gray-900 text-sm truncate flex-1">
+                    {{ template.name }}
+                  </h4>
+                  <UButton
+                    color="red"
+                    variant="ghost"
+                    size="xs"
+                    icon="i-heroicons-trash"
+                    @click.stop="deleteTemplate(template.id)"
+                  />
+                </div>
+                <p class="text-xs text-gray-500 mb-2">
+                  上传于 {{ new Date(template.uploadDate).toLocaleString('zh-CN') }}
+                </p>
+                <div class="flex flex-wrap gap-1">
+                  <UBadge
+                    v-for="placeholder in template.placeholders.slice(0, 3)"
+                    :key="placeholder"
+                    color="blue"
+                    variant="soft"
+                    size="xs"
+                  >
+                    {{ placeholder }}
+                  </UBadge>
+                  <UBadge
+                    v-if="template.placeholders.length > 3"
+                    color="gray"
+                    variant="soft"
+                    size="xs"
+                  >
+                    +{{ template.placeholders.length - 3 }}
+                  </UBadge>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 填充模板表单 -->
+          <div v-if="selectedTemplate" class="border-t pt-6">
+            <h3 class="font-semibold text-gray-900 mb-4">填充模板字段</h3>
+            <div class="grid gap-4 md:grid-cols-2">
+              <div
+                v-for="placeholder in selectedTemplate.placeholders"
+                :key="placeholder"
+                class="space-y-2"
+              >
+                <label class="block text-sm font-medium text-gray-700">
+                  {{ placeholder }}
+                </label>
+                <UTextarea
+                  v-model="templateData[placeholder]"
+                  :placeholder="`请输入${placeholder}`"
+                  :rows="3"
+                />
+              </div>
+            </div>
+            <div class="mt-6 flex justify-end">
+              <UButton
+                color="primary"
+                size="lg"
+                :loading="isGenerating"
+                :disabled="!selectedTemplate"
+                @click="generateDocument"
+              >
+                <UIcon name="i-heroicons-document-arrow-down" class="w-5 h-5 mr-2" />
+                {{ isGenerating ? '生成中...' : '生成Word文档' }}
+              </UButton>
+            </div>
+          </div>
+        </div>
+      </UCard>
     </UContainer>
   </div>
 </template>

@@ -1,13 +1,16 @@
 # PPT课件内容提取工具
 
-一个简洁高效的PPT内容提取工具，完整无误地提取幻灯片中的所有文字内容。
+一个简洁高效的PPT内容提取工具，完整无误地提取幻灯片中的所有文字内容，并支持Word教案模板管理和生成。
 
 ## 功能特性
 
 - ✅ **完整提取PPT内容**：原封不动提取幻灯片标题、内容和备注
 - 📋 **一键复制**：方便快速复制提取的内容
-- 🎨 **简洁美观的界面**：使用Nuxt UI和Tailwind CSS构建
 - 📄 **文档信息提取**：自动提取PPT的标题、作者、主题等元数据
+- 📝 **Word模板管理**：上传并管理多个Word教案模板
+- 🔧 **自定义占位符**：模板支持自定义字段占位符（如 {课程目标}、{教学重点}）
+- 📥 **一键生成Word文档**：填充模板数据后一键生成并下载Word教案文档
+- 🎨 **简洁美观的界面**：使用Nuxt UI和Tailwind CSS构建
 
 ## 技术栈
 
@@ -15,6 +18,7 @@
 - **UI组件库**: Nuxt UI
 - **样式**: Tailwind CSS
 - **PPT解析**: adm-zip + xml2js
+- **Word处理**: docxtemplater + pizzip
 
 ## 快速开始
 
@@ -41,7 +45,7 @@ pnpm preview
 
 ## 使用说明
 
-### 基础使用
+### PPT内容提取
 
 1. 点击上传区域选择 `.pptx` 格式的PPT文件
 2. 点击"开始提取"按钮
@@ -55,6 +59,44 @@ pnpm preview
 - **备注内容**：幻灯片的备注信息
 - **文档元数据**：PPT的标题、作者、主题等信息
 
+### Word教案模板管理
+
+#### 1. 创建模板
+
+在Word中创建教案模板，使用 `{字段名}` 作为占位符。例如：
+
+```
+课程名称：{课程名称}
+课程目标：
+{课程目标}
+
+教学重点：
+{教学重点}
+
+教学难点：
+{教学难点}
+```
+
+#### 2. 上传模板
+
+1. 点击"Word教案模板管理"区域的"展开"按钮
+2. 在"上传新模板"区域选择Word模板文件（.docx格式）
+3. 点击"上传模板"按钮
+4. 系统会自动识别模板中的占位符
+
+#### 3. 生成Word文档
+
+1. 在模板列表中点击选择一个模板
+2. 在"填充模板字段"区域填写所有字段内容
+3. 点击"生成Word文档"按钮
+4. 系统会自动下载生成的Word文档
+
+#### 4. 管理模板
+
+- **查看模板**：模板列表显示所有已上传的模板及其占位符
+- **选择模板**：点击模板卡片可以选择该模板进行填充
+- **删除模板**：点击模板卡片右上角的删除图标可以删除模板
+
 ## 项目结构
 
 ```
@@ -65,9 +107,16 @@ lesson-plan-editor/
 │   └── app.vue                # 根组件
 ├── server/
 │   ├── api/
-│   │   └── extract-pptx.post.ts  # PPT提取API
+│   │   ├── extract-pptx.post.ts      # PPT提取API
+│   │   └── templates/
+│   │       ├── upload.post.ts        # 模板上传API
+│   │       ├── list.get.ts           # 模板列表API
+│   │       ├── [id].delete.ts        # 模板删除API
+│   │       └── generate.post.ts      # 文档生成API
 │   └── utils/
-│       └── pptx-extractor.ts     # PPT解析工具
+│       ├── pptx-extractor.ts         # PPT解析工具
+│       └── template-manager.ts       # 模板管理工具
+├── .templates/                # 模板存储目录（自动创建）
 ├── nuxt.config.ts            # Nuxt配置
 └── package.json              # 项目依赖
 ```
@@ -87,28 +136,74 @@ lesson-plan-editor/
   "success": true,
   "data": {
     "content": {
-      "slides": [
-        {
-          "slideNumber": 1,
-          "texts": ["标题", "内容1", "内容2"],
-          "notes": "备注内容"
-        }
-      ],
+      "slides": [...],
       "totalSlides": 10,
-      "metadata": {
-        "title": "课件标题",
-        "author": "作者",
-        "subject": "主题"
-      }
+      "metadata": {...}
     }
   }
 }
 ```
 
+### POST /api/templates/upload
+
+上传Word模板。
+
+**请求参数（FormData）**:
+- `file`: Word模板文件（.docx格式）
+
+**响应**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "1234567890",
+    "name": "教案模板.docx",
+    "uploadDate": "2025-01-06T...",
+    "placeholders": ["课程目标", "教学重点", "教学难点"]
+  }
+}
+```
+
+### GET /api/templates/list
+
+获取所有模板列表。
+
+**响应**:
+```json
+{
+  "success": true,
+  "data": [...]
+}
+```
+
+### DELETE /api/templates/:id
+
+删除指定模板。
+
+### POST /api/templates/generate
+
+填充模板并生成Word文档。
+
+**请求参数（JSON）**:
+```json
+{
+  "templateId": "1234567890",
+  "data": {
+    "课程目标": "...",
+    "教学重点": "...",
+    "教学难点": "..."
+  }
+}
+```
+
+**响应**: Word文档文件流（application/vnd.openxmlformats-officedocument.wordprocessingml.document）
+
 ## 注意事项
 
-- 仅支持 `.pptx` 格式的文件（不支持旧版.ppt格式）
-- 提取的内容完全保留原始文字，不做任何修改
+- 仅支持 `.pptx` 格式的PPT文件（不支持旧版.ppt格式）
+- 仅支持 `.docx` 格式的Word文件（不支持旧版.doc格式）
+- 提取的PPT内容完全保留原始文字，不做任何修改
+- 模板占位符格式为 `{字段名}`，必须严格使用单花括号
 - 建议使用Chrome或Edge浏览器以获得最佳体验
 
 ## License
