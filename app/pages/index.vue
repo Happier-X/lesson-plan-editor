@@ -21,6 +21,7 @@ const selectedTemplate = ref<TemplateInfo | null>(null)
 const templateFile = ref<File | null>(null)
 const isUploadingTemplate = ref(false)
 const isGenerating = ref(false)
+const isSmartFilling = ref(false)
 const showTemplateManager = ref(false)
 const templateData = ref<Record<string, string>>({})
 
@@ -268,6 +269,66 @@ const selectTemplate = (template: TemplateInfo) => {
   template.placeholders.forEach(placeholder => {
     templateData.value[placeholder] = ''
   })
+}
+
+// 智能填充
+const smartFill = async () => {
+  if (!selectedTemplate.value) {
+    toast.add({
+      title: '请选择模板',
+      description: '请先选择一个Word模板',
+      color: 'amber',
+      timeout: 3000
+    })
+    return
+  }
+
+  if (!extractedContent.value) {
+    toast.add({
+      title: '请先提取PPT内容',
+      description: '需要先上传并提取PPT内容才能使用智能填充',
+      color: 'amber',
+      timeout: 3000
+    })
+    return
+  }
+
+  isSmartFilling.value = true
+
+  try {
+    const response = await $fetch<{
+      success: boolean
+      data: Record<string, string>
+    }>('/api/templates/smart-fill', {
+      method: 'POST',
+      body: {
+        templateId: selectedTemplate.value.id,
+        pptContent: extractedContent.value
+      }
+    })
+
+    if (response.success) {
+      // 填充数据到表单
+      templateData.value = response.data
+
+      toast.add({
+        title: '智能填充成功',
+        description: 'AI已根据PPT内容智能填充所有字段',
+        color: 'green',
+        timeout: 3000
+      })
+    }
+  } catch (error: any) {
+    console.error('智能填充失败:', error)
+    toast.add({
+      title: '智能填充失败',
+      description: error.data?.message || '请稍后重试',
+      color: 'red',
+      timeout: 5000
+    })
+  } finally {
+    isSmartFilling.value = false
+  }
 }
 
 // 生成Word文档
@@ -638,7 +699,20 @@ onMounted(() => {
 
           <!-- 填充模板表单 -->
           <div v-if="selectedTemplate" class="border-t pt-6">
-            <h3 class="font-semibold text-gray-900 mb-4">填充模板字段</h3>
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-semibold text-gray-900">填充模板字段</h3>
+              <UButton
+                v-if="extractedContent"
+                color="violet"
+                variant="soft"
+                size="sm"
+                :loading="isSmartFilling"
+                @click="smartFill"
+              >
+                <UIcon name="i-heroicons-sparkles" class="w-4 h-4 mr-1" />
+                {{ isSmartFilling ? 'AI智能填充中...' : 'AI智能填充' }}
+              </UButton>
+            </div>
             <div class="grid gap-4 md:grid-cols-2">
               <div
                 v-for="placeholder in selectedTemplate.placeholders"

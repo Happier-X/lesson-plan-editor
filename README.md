@@ -9,6 +9,7 @@
 - 📄 **文档信息提取**：自动提取PPT的标题、作者、主题等元数据
 - 📝 **Word模板管理**：上传并管理多个Word教案模板
 - 🔧 **自定义占位符**：模板支持自定义字段占位符（如 {课程目标}、{教学重点}）
+- 🤖 **AI智能填充**：使用AI自动分析PPT内容并智能填充Word模板字段
 - 📥 **一键生成Word文档**：填充模板数据后一键生成并下载Word教案文档
 - 🎨 **简洁美观的界面**：使用Nuxt UI和Tailwind CSS构建
 
@@ -19,6 +20,7 @@
 - **样式**: Tailwind CSS
 - **PPT解析**: adm-zip + xml2js
 - **Word处理**: docxtemplater + pizzip
+- **AI能力**: OpenAI API
 
 ## 快速开始
 
@@ -28,7 +30,19 @@
 pnpm install
 ```
 
-### 2. 启动开发服务器
+### 2. 配置环境变量
+
+创建 `.env` 文件，配置OpenAI API密钥（用于AI智能填充功能）：
+
+```env
+NUXT_PUBLIC_OPENAI_API_KEY=your_openai_api_key
+NUXT_PUBLIC_OPENAI_BASE_URL=https://api.openai.com/v1
+NUXT_PUBLIC_OPENAI_MODEL=gpt-4o-mini
+```
+
+> 注意：如果不配置OpenAI，PPT提取和Word生成功能仍可正常使用，只是无法使用AI智能填充功能。
+
+### 3. 启动开发服务器
 
 ```bash
 pnpm dev
@@ -36,7 +50,7 @@ pnpm dev
 
 访问 http://localhost:3000 开始使用。
 
-### 3. 构建生产版本
+### 4. 构建生产版本
 
 ```bash
 pnpm build
@@ -86,8 +100,19 @@ pnpm preview
 
 #### 3. 生成Word文档
 
+**方式一：AI智能填充（推荐）**
+
+1. 先上传并提取PPT内容
+2. 在模板列表中点击选择一个模板
+3. 点击"AI智能填充"按钮
+4. AI会自动分析PPT内容，智能匹配并填充所有字段
+5. 检查并调整填充内容（如需要）
+6. 点击"生成Word文档"按钮下载
+
+**方式二：手动填充**
+
 1. 在模板列表中点击选择一个模板
-2. 在"填充模板字段"区域填写所有字段内容
+2. 在"填充模板字段"区域手动填写所有字段内容
 3. 点击"生成Word文档"按钮
 4. 系统会自动下载生成的Word文档
 
@@ -112,9 +137,11 @@ lesson-plan-editor/
 │   │       ├── upload.post.ts        # 模板上传API
 │   │       ├── list.get.ts           # 模板列表API
 │   │       ├── [id].delete.ts        # 模板删除API
+│   │       ├── smart-fill.post.ts    # AI智能填充API
 │   │       └── generate.post.ts      # 文档生成API
 │   └── utils/
 │       ├── pptx-extractor.ts         # PPT解析工具
+│       ├── openai-helper.ts          # OpenAI辅助工具
 │       └── template-manager.ts       # 模板管理工具
 ├── .templates/                # 模板存储目录（自动创建）
 ├── nuxt.config.ts            # Nuxt配置
@@ -180,6 +207,34 @@ lesson-plan-editor/
 
 删除指定模板。
 
+### POST /api/templates/smart-fill
+
+使用AI智能填充模板字段。
+
+**请求参数（JSON）**:
+```json
+{
+  "templateId": "1234567890",
+  "pptContent": {
+    "slides": [...],
+    "totalSlides": 10,
+    "metadata": {...}
+  }
+}
+```
+
+**响应**:
+```json
+{
+  "success": true,
+  "data": {
+    "课程目标": "根据PPT内容AI生成的内容",
+    "教学重点": "根据PPT内容AI生成的内容",
+    ...
+  }
+}
+```
+
 ### POST /api/templates/generate
 
 填充模板并生成Word文档。
@@ -204,6 +259,7 @@ lesson-plan-editor/
 - 仅支持 `.docx` 格式的Word文件（不支持旧版.doc格式）
 - 提取的PPT内容完全保留原始文字，不做任何修改
 - 模板占位符格式为 `{字段名}`，必须严格使用单花括号
+- AI智能填充需要配置OpenAI API密钥
 - 建议使用Chrome或Edge浏览器以获得最佳体验
 
 ## License
