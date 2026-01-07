@@ -1,17 +1,11 @@
 import PizZip from 'pizzip'
 import Docxtemplater from 'docxtemplater'
-import { put, del, list, head } from '@vercel/blob'
+import { put, del, list } from '@vercel/blob'
+import type { TemplateInfo as BaseTemplateInfo, TemplateData } from './template-manager'
 
-export interface TemplateInfo {
-  id: string
-  name: string
-  uploadDate: string
-  placeholders: string[]
-  blobUrl: string  // Blob 存储的 URL
-}
-
-export interface TemplateData {
-  [key: string]: string | string[] | any
+// 扩展模板信息，添加 Blob URL
+interface TemplateInfo extends BaseTemplateInfo {
+  blobUrl?: string  // Blob 存储的 URL
 }
 
 /**
