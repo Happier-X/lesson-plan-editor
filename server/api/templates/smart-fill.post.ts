@@ -1,5 +1,5 @@
 import { matchPptToTemplateFields } from '../../utils/openai-helper'
-import { templateManager } from '../../utils/template-manager'
+import { templateManager } from '../../utils/get-template-manager'
 import type { PptxContent } from '../../utils/pptx-extractor'
 
 export default defineEventHandler(async (event) => {

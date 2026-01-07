@@ -294,16 +294,30 @@ lesson-plan-editor/
 2. **导入 Git 仓库**：连接你的 GitHub 账号并选择此仓库
 3. **配置环境变量**（必需）：
    ```
+   # OpenAI API 配置
    NUXT_PUBLIC_OPENAI_API_KEY=你的API密钥
    NUXT_PUBLIC_OPENAI_BASE_URL=https://api.openai.com/v1
    NUXT_PUBLIC_OPENAI_MODEL=gpt-4o-mini
+
+   # Vercel Blob 存储（自动配置）
+   BLOB_READ_WRITE_TOKEN=（Vercel 自动生成）
    ```
-4. **部署**：点击 Deploy 按钮，等待构建完成
+4. **启用 Vercel Blob**：
+   - 在 Vercel 项目设置中，进入 Storage 选项卡
+   - 点击 "Create Database" → 选择 "Blob"
+   - Vercel 会自动配置 `BLOB_READ_WRITE_TOKEN` 环境变量
+5. **部署**：点击 Deploy 按钮，等待构建完成
+
+### 存储说明
+
+- **本地开发**：模板文件保存在 `.templates/` 目录（文件系统）
+- **Vercel 部署**：模板文件保存在 Vercel Blob 存储（对象存储）
+- 代码会自动检测环境并使用对应的存储方式
 
 ### 注意事项
 
 - 确保使用支持视觉的模型（gpt-4o、gpt-4o-mini）
-- Vercel 免费版有使用限制，请注意
+- Vercel Blob 免费版提供 500MB 存储空间
 - 部署后可以在 Vercel 控制台查看日志和修改环境变量
 
 ## License
