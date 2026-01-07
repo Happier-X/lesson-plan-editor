@@ -136,6 +136,14 @@ export async function matchPptToTemplateFields(
   const openai = getOpenAIClient()
   const model = config.public.openaiModel || 'gpt-3.5-turbo'
 
+  console.log('使用的模型:', model)
+
+  // 检查模型是否支持 vision
+  const visionSupportedModels = ['gpt-4-vision', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini', 'claude-3']
+  const supportsVision = visionSupportedModels.some(m => model.includes(m))
+
+  console.log('模型是否支持视觉:', supportsVision)
+
   // 整理PPT内容，限制长度避免token过多
   const slidesText = pptContent.slides.map(slide => {
     const texts = slide.texts.join('\n')
@@ -158,16 +166,57 @@ export async function matchPptToTemplateFields(
 
   // 收集所有图片（限制数量避免token过多）
   const allImages: string[] = []
-  for (const slide of pptContent.slides) {
-    if (slide.images && slide.images.length > 0) {
-      // 每张幻灯片最多取前2张图片
-      allImages.push(...slide.images.slice(0, 2))
+
+  // 只有在模型支持 vision 时才提取图片
+  if (supportsVision) {
+    for (const slide of pptContent.slides) {
+      if (slide.images && slide.images.length > 0) {
+        // 过滤掉太小的图片（可能是无效图片或占位符）
+        // 只保留 base64 数据长度 > 2000 的图片（约 1.5KB）
+        const validImages = slide.images.filter(img => {
+          const match = img.match(/^data:([^;]+);base64,(.+)$/)
+          if (!match) return false
+          const base64Data = match[2]
+          return base64Data.length > 2000
+        })
+
+        // 每张幻灯片最多取前2张有效图片
+        allImages.push(...validImages.slice(0, 2))
+      }
+      // 总共最多10张图片（减少数量避免token过多）
+      if (allImages.length >= 10) break
     }
-    // 总共最多20张图片
-    if (allImages.length >= 20) break
+  } else {
+    console.log('当前模型不支持视觉功能，跳过图片提取')
   }
 
-  console.log('提取的图片数量:', allImages.length)
+  console.log('提取的有效图片数量:', allImages.length)
+
+  // 调试：检查第一张图片的格式并保存
+  if (allImages.length > 0) {
+    const firstImage = allImages[0]
+    console.log('第一张图片格式:', firstImage.substring(0, 100))
+    console.log('图片数据长度:', firstImage.length)
+
+    // 调试：保存第一张图片到临时文件验证
+    try {
+      const match = firstImage.match(/^data:([^;]+);base64,(.+)$/)
+      if (match) {
+        const [, mimeType, base64Data] = match
+        const buffer = Buffer.from(base64Data, 'base64')
+        console.log('解码后的图片大小:', buffer.length, '字节')
+
+        // 验证 PNG 文件头
+        if (mimeType === 'image/png') {
+          const pngHeader = buffer.slice(0, 8).toString('hex')
+          const validPngHeader = '89504e470d0a1a0a'
+          console.log('PNG 文件头:', pngHeader, '是否有效:', pngHeader === validPngHeader)
+        }
+      }
+    } catch (e) {
+      console.error('调试图片失败:', e)
+    }
+  }
 
   // 构建更详细的中文提示词
   const systemPrompt = `你是一位经验丰富的医学护理教学设计专家，擅长根据课件内容编写详细、专业的护理教案。
@@ -327,42 +376,102 @@ A. XXX  B. XXX  C. XXX  D. XXX  E. XXX
       schemaFields[field] = z.string().describe(`${field}的详细内容，要求内容充实，格式规范，列表项独立成行`)
     }
 
-    // 构建消息内容（支持多模态）
-    const messageContent: any[] = [
+    // 构建用户消息内容（支持多模态）
+    const userMessageContent: any[] = [
       {
         type: 'text',
         text: userPrompt
       }
     ]
 
-    // 如果有图片，添加到消息中
-    if (allImages.length > 0) {
-      console.log(`发送${allImages.length}张图片给AI进行视觉分析`)
+    // 如果有图片，添加到消息内容中
+    let useImages = allImages.length > 0
+    if (useImages) {
+      console.log(`尝试发送${allImages.length}张图片给AI进行视觉分析`)
 
-      for (const imageBase64 of allImages) {
-        messageContent.push({
-          type: 'image',
-          image: imageBase64
-        })
+      let addedCount = 0
+      for (let i = 0; i < allImages.length; i++) {
+        const imageDataUrl = allImages[i]
+
+        // 验证并解析 data URL
+        const match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/)
+        if (!match) {
+          console.error(`图片 ${i + 1}: 无效的 data URL 格式`)
+          continue
+        }
+
+        const [, mimeType, base64Data] = match
+
+        // 尝试验证 base64 数据
+        try {
+          // 验证 base64 是否有效
+          const testBuffer = Buffer.from(base64Data, 'base64')
+          if (testBuffer.length < 100) {
+            console.warn(`图片 ${i + 1}: 数据太小 (${testBuffer.length} 字节)，跳过`)
+            continue
+          }
+
+          // 验证 PNG 文件头
+          if (mimeType === 'image/png') {
+            const pngHeader = testBuffer.slice(0, 8).toString('hex')
+            const validPngHeader = '89504e470d0a1a0a'
+            if (pngHeader !== validPngHeader) {
+              console.warn(`图片 ${i + 1}: PNG 文件头无效 (${pngHeader})，跳过`)
+              continue
+            }
+          }
+
+          // 重新构造完整的 data URL，确保格式正确
+          const validDataUrl = `data:${mimeType};base64,${base64Data}`
+
+          // 使用 AI SDK 的图片格式（Content Part）
+          userMessageContent.push({
+            type: 'image',
+            image: validDataUrl
+          })
+
+          addedCount++
+          console.log(`图片 ${i + 1}: 验证通过，已添加 (${testBuffer.length} 字节)`)
+        } catch (e) {
+          console.error(`图片 ${i + 1}: base64 验证失败:`, e)
+          continue
+        }
       }
+
+      console.log(`成功添加 ${addedCount} 张图片到消息`)
     }
 
-    const { object } = await generateObject({
-      model: openai(model),
-      schema: z.object(schemaFields),
-      messages: [
-        {
-          role: 'system',
-          content: systemPrompt
-        },
-        {
-          role: 'user',
-          content: messageContent
-        }
-      ],
-      temperature: 0.7,
-      maxTokens: 4000
-    })
+    let result
+    try {
+      console.log('发送请求到 AI，消息内容项数:', userMessageContent.length)
+
+      // 总是使用数组格式发送content（和昨天的工作代码一致）
+      result = await generateObject({
+        model: openai(model),
+        schema: z.object(schemaFields),
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: userMessageContent  // 总是传递数组
+          }
+        ],
+        temperature: 0.7,
+        maxTokens: 4000
+      })
+
+      console.log('AI 响应成功')
+    } catch (error: any) {
+      console.error('=== AI 请求失败 ===')
+      console.error('错误信息:', error.message)
+      console.error('完整错误:', error)
+      throw error
+    }
+
+    const { object } = result
 
     console.log('AI 响应成功')
 
