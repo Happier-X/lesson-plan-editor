@@ -35,6 +35,7 @@ const isUploadingTemplate = ref(false)
 const isGenerating = ref(false)
 const isSmartFilling = ref(false)
 const templateData = ref<Record<string, string>>({})
+const showPptContent = ref(true) // 默认展开PPT内容
 
 // 步骤定义
 const steps = [
@@ -793,6 +794,72 @@ onMounted(() => {
           </div>
 
           <div v-if="selectedTemplate" class="space-y-6">
+            <!-- PPT内容参考 -->
+            <div v-if="extractedContent" class="border-2 border-blue-200 rounded-lg overflow-hidden">
+              <div
+                class="bg-blue-50 px-6 py-3 cursor-pointer hover:bg-blue-100 transition-colors flex items-center justify-between"
+                @click="showPptContent = !showPptContent"
+              >
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-document-text" class="w-5 h-5 text-blue-600" />
+                  <h3 class="font-semibold text-gray-900">📄 PPT内容参考</h3>
+                  <UBadge color="blue" variant="soft" size="xs">
+                    点击{{ showPptContent ? '收起' : '展开' }}
+                  </UBadge>
+                </div>
+                <UIcon
+                  :name="showPptContent ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
+                  class="w-5 h-5 text-gray-600"
+                />
+              </div>
+              <div v-show="showPptContent" class="p-6 bg-white max-h-96 overflow-y-auto">
+                <div class="space-y-4">
+                  <div
+                    v-for="slide in extractedContent.slides"
+                    :key="slide.slideNumber"
+                    class="border-l-4 border-blue-400 pl-4 py-2 bg-gray-50 rounded"
+                  >
+                    <div class="flex items-center gap-2 mb-2">
+                      <UBadge color="blue" variant="soft" size="xs">
+                        第 {{ slide.slideNumber }} 页
+                      </UBadge>
+                      <UBadge v-if="slide.images && slide.images.length > 0" color="violet" variant="soft" size="xs">
+                        📸 {{ slide.images.length }} 张图片
+                      </UBadge>
+                    </div>
+
+                    <!-- 文本内容 -->
+                    <div v-if="slide.texts.length" class="space-y-1 mb-2">
+                      <div
+                        v-for="(text, idx) in slide.texts"
+                        :key="idx"
+                        class="text-sm text-gray-800"
+                      >
+                        {{ text }}
+                      </div>
+                    </div>
+
+                    <!-- 图片预览 -->
+                    <div v-if="slide.images && slide.images.length > 0" class="grid grid-cols-3 gap-2 mt-2">
+                      <img
+                        v-for="(img, idx) in slide.images"
+                        :key="idx"
+                        :src="img"
+                        :alt="`第${slide.slideNumber}页图片${idx + 1}`"
+                        class="w-full h-20 object-contain bg-white rounded border border-gray-200"
+                      />
+                    </div>
+
+                    <!-- 备注 -->
+                    <div v-if="slide.notes" class="mt-2 pt-2 border-t border-gray-200">
+                      <p class="text-xs font-medium text-gray-500 mb-1">💬 备注</p>
+                      <p class="text-sm text-gray-600">{{ slide.notes }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- AI 智能填充大按钮 -->
             <div class="relative overflow-hidden">
               <div class="absolute inset-0 bg-gradient-to-r from-violet-600 to-purple-600 opacity-5" />
@@ -948,7 +1015,7 @@ onMounted(() => {
                 上一步
               </UButton>
               <UButton
-                color="green"
+                color="primary"
                 size="lg"
                 :loading="isGenerating"
                 @click="generateDocument"
