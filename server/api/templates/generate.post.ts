@@ -1,5 +1,4 @@
-import { templateManager } from '../../utils/get-template-manager'
-import type { TemplateData } from '../../utils/template-manager'
+import { templateManager, type TemplateData } from '../../utils/get-template-manager'
 
 export default defineEventHandler(async (event) => {
   try {

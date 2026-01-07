@@ -221,11 +221,3 @@ export class TemplateBlobManager {
     }
   }
 }
-
-// 检查是否在 Vercel 环境中
-const isVercel = process.env.VERCEL === '1' || process.env.BLOB_READ_WRITE_TOKEN
-
-// 根据环境选择管理器
-export const templateManager = isVercel
-  ? new TemplateBlobManager()
-  : (await import('./template-manager')).templateManager
