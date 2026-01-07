@@ -284,6 +284,28 @@ lesson-plan-editor/
 - AI智能填充需要配置OpenAI API密钥
 - 建议使用Chrome或Edge浏览器以获得最佳体验
 
+## 部署到 Vercel
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Happier-X/lesson-plan-editor)
+
+### 步骤
+
+1. **点击上面的按钮** 或访问 [Vercel](https://vercel.com)
+2. **导入 Git 仓库**：连接你的 GitHub 账号并选择此仓库
+3. **配置环境变量**（必需）：
+   ```
+   NUXT_PUBLIC_OPENAI_API_KEY=你的API密钥
+   NUXT_PUBLIC_OPENAI_BASE_URL=https://api.openai.com/v1
+   NUXT_PUBLIC_OPENAI_MODEL=gpt-4o-mini
+   ```
+4. **部署**：点击 Deploy 按钮，等待构建完成
+
+### 注意事项
+
+- 确保使用支持视觉的模型（gpt-4o、gpt-4o-mini）
+- Vercel 免费版有使用限制，请注意
+- 部署后可以在 Vercel 控制台查看日志和修改环境变量
+
 ## License
 
 MIT
