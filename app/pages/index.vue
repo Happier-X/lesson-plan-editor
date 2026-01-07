@@ -425,10 +425,10 @@ onMounted(() => {
       <!-- 标题区域 -->
       <div class="text-center mb-12">
         <h1 class="text-4xl font-bold text-gray-900 mb-3">
-          PPT课件内容提取工具
+          教案生成器
         </h1>
         <p class="text-lg text-gray-600">
-          完整提取PPT课件中的所有文字内容
+          提取PPT课件内容，智能生成教案文档
         </p>
       </div>
 
