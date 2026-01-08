@@ -64,6 +64,27 @@ const hasImages = computed(() => {
 // 文件选择处理
 const fileInput = ref<HTMLInputElement>()
 
+// PPT 拖拽上传
+const {
+  isDragging: isPptDragging,
+  handleDragEnter: handlePptDragEnter,
+  handleDragLeave: handlePptDragLeave,
+  handleDragOver: handlePptDragOver,
+  handleDrop: handlePptDrop
+} = useDragDrop({
+  accept: '.pptx',
+  maxSize: 100 * 1024 * 1024, // 100MB
+  onFileSelect: (file) => {
+    selectedFile.value = file
+    toast.add({
+      title: '文件已选择',
+      description: file.name,
+      color: 'green',
+      timeout: 2000
+    })
+  }
+})
+
 const handleFileSelect = (event: Event) => {
   const target = event.target as HTMLInputElement
   const file = target.files?.[0]
@@ -195,6 +216,21 @@ const loadTemplates = async () => {
 
 // 模板文件选择
 const templateFileInput = ref<HTMLInputElement>()
+
+// Word 模板拖拽上传
+const {
+  isDragging: isTemplateDragging,
+  handleDragEnter: handleTemplateDragEnter,
+  handleDragLeave: handleTemplateDragLeave,
+  handleDragOver: handleTemplateDragOver,
+  handleDrop: handleTemplateDrop
+} = useDragDrop({
+  accept: '.docx',
+  maxSize: 50 * 1024 * 1024, // 50MB
+  onFileSelect: (file) => {
+    templateFile.value = file
+  }
+})
 
 const handleTemplateFileSelect = (event: Event) => {
   const target = event.target as HTMLInputElement
@@ -515,20 +551,28 @@ onMounted(() => {
 
           <div class="max-w-2xl mx-auto space-y-6">
             <div
-              class="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-blue-500 transition-colors cursor-pointer"
+              class="border-2 border-dashed rounded-lg p-12 text-center transition-all cursor-pointer"
+              :class="isPptDragging
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-300 hover:border-blue-500'"
               @click="fileInput?.click()"
+              @dragenter="handlePptDragEnter"
+              @dragleave="handlePptDragLeave"
+              @dragover="handlePptDragOver"
+              @drop="handlePptDrop"
             >
               <div class="flex flex-col items-center gap-4">
                 <UIcon
                   name="i-heroicons-document-arrow-up"
-                  class="w-16 h-16 text-gray-400"
+                  class="w-16 h-16 transition-colors"
+                  :class="isPptDragging ? 'text-blue-500' : 'text-gray-400'"
                 />
                 <div>
                   <p class="text-lg text-gray-900 font-medium">
                     {{ selectedFile ? selectedFile.name : '点击选择或拖拽PPT文件' }}
                   </p>
                   <p class="text-sm text-gray-500 mt-2">
-                    仅支持 .pptx 格式
+                    仅支持 .pptx 格式，最大 100MB
                   </p>
                 </div>
               </div>
@@ -670,40 +714,57 @@ onMounted(() => {
 
           <div class="space-y-6">
             <!-- 上传新模板 -->
-            <div class="border-2 border-dashed border-gray-300 rounded-lg p-6">
-              <h3 class="font-semibold text-gray-900 mb-4">📤 上传新模板</h3>
-              <div class="flex gap-3">
+            <div
+              class="border-2 border-dashed rounded-lg p-6 transition-all cursor-pointer"
+              :class="isTemplateDragging
+                ? 'border-green-500 bg-green-50'
+                : 'border-gray-300 hover:border-green-500'"
+              @click="templateFileInput?.click()"
+              @dragenter="handleTemplateDragEnter"
+              @dragleave="handleTemplateDragLeave"
+              @dragover="handleTemplateDragOver"
+              @drop="handleTemplateDrop"
+            >
+              <div class="flex items-center gap-4">
+                <div class="flex-shrink-0">
+                  <div class="w-16 h-16 rounded-full flex items-center justify-center transition-colors"
+                       :class="isTemplateDragging ? 'bg-green-100' : 'bg-gray-100'">
+                    <UIcon
+                      name="i-heroicons-document-plus"
+                      class="w-8 h-8 transition-colors"
+                      :class="isTemplateDragging ? 'text-green-600' : 'text-gray-400'"
+                    />
+                  </div>
+                </div>
                 <div class="flex-1">
-                  <input
-                    ref="templateFileInput"
-                    type="file"
-                    accept=".docx"
-                    class="hidden"
-                    @change="handleTemplateFileSelect"
-                  />
+                  <h3 class="font-semibold text-gray-900 mb-1">
+                    {{ templateFile ? templateFile.name : '📤 点击选择或拖拽Word模板' }}
+                  </h3>
+                  <p class="text-sm text-gray-500">
+                    仅支持 .docx 格式，最大 50MB
+                  </p>
+                  <p class="text-xs text-gray-500 mt-2">
+                    💡 提示：模板中使用 <code class="bg-gray-100 px-1 rounded">{字段名}</code> 作为占位符，例如 {课程目标}, {教学重点}
+                  </p>
+                </div>
+                <div v-if="templateFile" class="flex-shrink-0">
                   <UButton
-                    color="white"
-                    block
+                    color="primary"
                     size="lg"
-                    @click="templateFileInput?.click()"
+                    :loading="isUploadingTemplate"
+                    @click.stop="uploadTemplate"
                   >
-                    <UIcon name="i-heroicons-document-plus" class="w-5 h-5 mr-2" />
-                    {{ templateFile ? templateFile.name : '选择Word模板文件 (.docx)' }}
+                    上传
                   </UButton>
                 </div>
-                <UButton
-                  color="primary"
-                  size="lg"
-                  :loading="isUploadingTemplate"
-                  :disabled="!templateFile"
-                  @click="uploadTemplate"
-                >
-                  上传
-                </UButton>
               </div>
-              <p class="text-xs text-gray-500 mt-2">
-                💡 提示：模板中使用 <code class="bg-gray-100 px-1 rounded">{字段名}</code> 作为占位符，例如 {课程目标}, {教学重点}
-              </p>
+              <input
+                ref="templateFileInput"
+                type="file"
+                accept=".docx"
+                class="hidden"
+                @change="handleTemplateFileSelect"
+              />
             </div>
 
             <!-- 模板列表 -->
